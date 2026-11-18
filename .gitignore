@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Build / dist
+dist/
+build/
+
+# Base de données
+data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Scripts locaux
+*.sh
+
+# Environnement
+.env
+.env.*
+!.env.example
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
