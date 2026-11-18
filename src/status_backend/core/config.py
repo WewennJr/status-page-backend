@@ -8,7 +8,6 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-# .env à la racine du backend (src/status_backend/core/config.py -> 3 parents au-dessus)
 ENV_FILE = Path(__file__).resolve().parents[3] / ".env"
 load_dotenv(ENV_FILE)
 

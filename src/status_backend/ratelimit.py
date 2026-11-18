@@ -17,6 +17,9 @@ class RateLimiter:
     def check(self, key: str) -> None:
         """Lève une 429 si trop de tentatives récentes, sinon enregistre celle-ci."""
         now = time.monotonic()
+        if len(self._hits) > 5000:
+            for stale in [k for k, v in self._hits.items() if not v]:
+                del self._hits[stale]
         hits = self._hits[key]
         while hits and now - hits[0] > self.window:
             hits.popleft()

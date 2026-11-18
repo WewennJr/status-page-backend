@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from datetime import timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
-from sqlalchemy import case, delete, func, select
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from sqlalchemy import case, delete, func, select, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..auth import (
+    DUMMY_PASSWORD_HASH,
     SESSION_COOKIE,
     create_session,
     get_current_admin,
@@ -29,6 +31,7 @@ from ..schemas import (
     LoginRequest,
     MonitorIn,
     MonitorOut,
+    MonitorReorder,
     SettingsIn,
     SetupRequest,
 )
@@ -71,13 +74,27 @@ async def setup(
     db: AsyncSession = Depends(get_db),
 ):
     setup_limiter.check(client_key(request))
-    count = len((await db.scalars(select(Admin))).all())
-    if count > 0:
+    # INSERT conditionnel atomique : empêche deux setups concurrents de créer
+    # deux comptes administrateurs.
+    result = await db.execute(
+        text(
+            "INSERT INTO admins (username, password_hash, created_at) "
+            "SELECT :username, :password_hash, CURRENT_TIMESTAMP "
+            "WHERE NOT EXISTS (SELECT 1 FROM admins)"
+        ),
+        {
+            "username": payload.username,
+            "password_hash": hash_password(payload.password),
+        },
+    )
+    if result.rowcount == 0:
         raise HTTPException(status_code=403, detail="Setup already done")
 
-    admin = Admin(username=payload.username, password_hash=hash_password(payload.password))
-    db.add(admin)
-    await db.flush()
+    admin = (
+        (await db.execute(select(Admin).where(Admin.username == payload.username)))
+        .scalars()
+        .one()
+    )
     session = await create_session(db, admin.id)
     await save_settings(db, dict(DEFAULT_SETTINGS))
     _set_session_cookie(response, session.token, request)
@@ -100,7 +117,10 @@ async def login(
         .scalars()
         .first()
     )
-    if admin is None or not verify_password(payload.password, admin.password_hash):
+    if admin is None:
+        verify_password(payload.password, DUMMY_PASSWORD_HASH)
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    if not verify_password(payload.password, admin.password_hash):
         raise HTTPException(status_code=401, detail="Invalid credentials")
     session = await create_session(db, admin.id)
     _set_session_cookie(response, session.token, request)
@@ -153,6 +173,31 @@ async def create_monitor(
     return monitor
 
 
+@router.post("/admin/monitors/reorder")
+async def reorder_monitors(
+    payload: MonitorReorder,
+    db: AsyncSession = Depends(get_db),
+    _admin: Admin = Depends(get_current_admin),
+):
+    ids = [item.id for item in payload.items]
+    if len(ids) != len(set(ids)):
+        raise HTTPException(status_code=422, detail="Duplicate monitor ids")
+    found = {
+        m.id: m
+        for m in (
+            await db.scalars(select(Monitor).where(Monitor.id.in_(ids)))
+        ).all()
+    }
+    if len(found) != len(ids):
+        raise HTTPException(status_code=404, detail="Monitor not found")
+    for item in payload.items:
+        monitor = found[item.id]
+        monitor.group_name = item.group_name
+        monitor.position = item.position
+    await db.commit()
+    return {"ok": True}
+
+
 @router.put("/admin/monitors/{monitor_id}", response_model=MonitorOut)
 async def update_monitor(
     monitor_id: int,
@@ -195,7 +240,7 @@ def _validate_status(status: str) -> None:
 async def list_incidents(
     db: AsyncSession = Depends(get_db),
     _admin: Admin = Depends(get_current_admin),
-    limit: int = 50,
+    limit: int = Query(default=50, ge=1, le=200),
 ):
     return (
         await db.scalars(
@@ -342,7 +387,11 @@ async def update_account(
             )
         )
 
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(status_code=409, detail="Username already taken")
     return {"username": admin.username}
 
 

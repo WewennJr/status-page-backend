@@ -73,8 +73,8 @@ class SetupRequest(BaseModel):
 
 
 class LoginRequest(BaseModel):
-    username: str
-    password: str
+    username: str = Field(min_length=1, max_length=64)
+    password: str = Field(min_length=1, max_length=128)
 
 
 class AdminInfo(BaseModel):
@@ -89,22 +89,35 @@ class AuthState(BaseModel):
 # ===== Admin : monitors =====
 
 
+URL_PATTERN = r"^https?://[^\s]+$"
+
+
 class MonitorIn(BaseModel):
     name: str = Field(min_length=1, max_length=128)
-    url: str = Field(min_length=8, max_length=512)
-    description: str = ""
-    group_name: str = "Services"
+    url: str = Field(min_length=8, max_length=512, pattern=URL_PATTERN)
+    description: str = Field(default="", max_length=2000)
+    group_name: str = Field(default="Services", min_length=1, max_length=64)
     interval_seconds: int = Field(default=60, ge=10, le=86400)
-    email: str = ""
+    email: str = Field(default="", max_length=255)
     show_response_time: bool = True
     show_uptime: bool = True
-    position: int = 0
+    position: int = Field(default=0, ge=0, le=100000)
     active: bool = True
 
 
 class MonitorOut(MonitorIn):
     model_config = ConfigDict(from_attributes=True)
     id: int
+
+
+class MonitorOrderItem(BaseModel):
+    id: int
+    group_name: str = Field(min_length=1, max_length=64)
+    position: int = Field(ge=0, le=100000)
+
+
+class MonitorReorder(BaseModel):
+    items: list[MonitorOrderItem] = Field(min_length=1, max_length=500)
 
 
 # ===== Admin : incidents =====
@@ -144,8 +157,8 @@ HEX_COLOR = r"^$|^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$"
 class SettingsIn(BaseModel):
     site_name: str = Field(min_length=1, max_length=128)
     site_icon: str = Field(default="", max_length=255)
-    site_url: str = Field(default="", max_length=255)
-    favicon_url: str = Field(default="", max_length=255)
+    site_url: str = Field(default="", max_length=255, pattern=r"^$|^https?://[^\s]+$")
+    favicon_url: str = Field(default="", max_length=255, pattern=r"^$|^https?://[^\s]+$")
     welcome_text: str = Field(default="", max_length=500)
     footer_text: str = Field(default="", max_length=255)
     accent_color: str = Field(default="", pattern=HEX_COLOR)

@@ -28,6 +28,10 @@ def verify_password(password: str, hashed: str) -> bool:
         return False
 
 
+# Vérifié quand l'utilisateur n'existe pas, pour éviter une fuite de timing.
+DUMMY_PASSWORD_HASH = hash_password(secrets.token_hex(16))
+
+
 async def create_session(db: AsyncSession, admin_id: int) -> SessionToken:
     token = secrets.token_hex(32)
     session = SessionToken(
