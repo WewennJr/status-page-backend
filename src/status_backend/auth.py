@@ -45,16 +45,20 @@ async def get_current_admin(
     request: Request,
     db: AsyncSession = Depends(get_db),
 ) -> Admin:
+    admin = await get_optional_admin(request, db)
+    if admin is None:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    return admin
+
+
+async def get_optional_admin(request: Request, db: AsyncSession) -> Admin | None:
     token = request.cookies.get(SESSION_COOKIE)
     if not token:
-        raise HTTPException(status_code=401, detail="Not authenticated")
+        return None
     result = await db.execute(select(SessionToken).where(SessionToken.token == token))
     session = result.scalar_one_or_none()
     if session is None or session.expires_at.replace(tzinfo=timezone.utc) < datetime.now(
         timezone.utc
     ):
-        raise HTTPException(status_code=401, detail="Session expired")
-    admin = await db.get(Admin, session.admin_id)
-    if admin is None:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-    return admin
+        return None
+    return await db.get(Admin, session.admin_id)

@@ -13,7 +13,15 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .database import SessionLocal
-from .models import CheckResult, Incident, IncidentUpdate, Monitor, Setting, utcnow
+from .models import (
+    CheckResult,
+    Incident,
+    IncidentUpdate,
+    Monitor,
+    SessionToken,
+    Setting,
+    utcnow,
+)
 
 logger = logging.getLogger("status.checker")
 
@@ -144,6 +152,8 @@ async def _cleanup_old_checks() -> None:
             retention = DEFAULT_RETENTION_DAYS
         cutoff = utcnow() - timedelta(days=retention)
         await db.execute(delete(CheckResult).where(CheckResult.checked_at < cutoff))
+        # purge des sessions expirées
+        await db.execute(delete(SessionToken).where(SessionToken.expires_at < utcnow()))
         await db.commit()
 
 

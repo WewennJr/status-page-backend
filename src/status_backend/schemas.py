@@ -81,6 +81,11 @@ class AdminInfo(BaseModel):
     username: str
 
 
+class AuthState(BaseModel):
+    authenticated: bool
+    username: str | None = None
+
+
 # ===== Admin : monitors =====
 
 

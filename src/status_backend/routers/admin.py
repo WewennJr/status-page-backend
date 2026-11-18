@@ -12,6 +12,7 @@ from ..auth import (
     SESSION_COOKIE,
     create_session,
     get_current_admin,
+    get_optional_admin,
     hash_password,
     verify_password,
 )
@@ -20,6 +21,7 @@ from ..database import get_db
 from ..models import Admin, CheckResult, Incident, IncidentUpdate, Monitor, SessionToken, utcnow
 from ..schemas import (
     AdminInfo,
+    AuthState,
     IncidentIn,
     IncidentOut,
     IncidentUpdateIn,
@@ -123,9 +125,13 @@ async def logout(
     return {"ok": True}
 
 
-@router.get("/auth/me", response_model=AdminInfo)
-async def me(admin: Admin = Depends(get_current_admin)):
-    return AdminInfo(username=admin.username)
+@router.get("/auth/me", response_model=AuthState)
+async def me(request: Request, db: AsyncSession = Depends(get_db)):
+    admin = await get_optional_admin(request, db)
+    return AuthState(
+        authenticated=admin is not None,
+        username=admin.username if admin else None,
+    )
 
 
 # ===== Admin : monitors =====
