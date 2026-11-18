@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import secrets
+from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
-from sqlalchemy import delete, func, select
+from sqlalchemy import case, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..auth import (
@@ -16,10 +16,11 @@ from ..auth import (
     hash_password,
     verify_password,
 )
-from ..core.config import get_settings as get_app_settings
 from ..database import get_db
 from ..models import Admin, CheckResult, Incident, IncidentUpdate, Monitor, SessionToken, utcnow
+from ..ratelimit import client_key, login_limiter, setup_limiter
 from ..schemas import (
+    AccountUpdate,
     AdminInfo,
     AuthState,
     IncidentIn,
@@ -42,10 +43,7 @@ router = APIRouter(prefix="/api", tags=["admin"])
 @router.get("/setup-required")
 async def setup_required(db: AsyncSession = Depends(get_db)):
     count = len((await db.scalars(select(Admin))).all())
-    return {
-        "setup_required": count == 0,
-        "token_required": bool(get_app_settings().setup_token),
-    }
+    return {"setup_required": count == 0}
 
 
 def _is_https(request: Request) -> bool:
@@ -72,13 +70,10 @@ async def setup(
     response: Response,
     db: AsyncSession = Depends(get_db),
 ):
+    setup_limiter.check(client_key(request))
     count = len((await db.scalars(select(Admin))).all())
     if count > 0:
         raise HTTPException(status_code=403, detail="Setup already done")
-
-    expected_token = get_app_settings().setup_token
-    if expected_token and not secrets.compare_digest(payload.token, expected_token):
-        raise HTTPException(status_code=403, detail="Invalid setup token")
 
     admin = Admin(username=payload.username, password_hash=hash_password(payload.password))
     db.add(admin)
@@ -99,6 +94,7 @@ async def login(
     response: Response,
     db: AsyncSession = Depends(get_db),
 ):
+    login_limiter.check(client_key(request))
     admin = (
         (await db.execute(select(Admin).where(Admin.username == payload.username)))
         .scalars()
@@ -299,21 +295,202 @@ async def read_settings(
 async def write_settings(
     payload: SettingsIn, db: AsyncSession = Depends(get_db), _admin: Admin = Depends(get_current_admin)
 ):
-    values = {k: str(v) for k, v in payload.model_dump().items()}
+    values = {
+        k: ("true" if v is True else "false" if v is False else str(v))
+        for k, v in payload.model_dump().items()
+    }
     await save_settings(db, values)
     return await get_settings(db)
 
 
-# ===== Admin : stats (pour le dashboard) =====
+# ===== Admin : compte =====
+
+
+@router.get("/admin/account")
+async def read_account(admin: Admin = Depends(get_current_admin)):
+    return {"username": admin.username}
+
+
+@router.put("/admin/account")
+async def update_account(
+    payload: AccountUpdate,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    admin: Admin = Depends(get_current_admin),
+):
+    if not verify_password(payload.current_password, admin.password_hash):
+        raise HTTPException(status_code=403, detail="Current password is incorrect")
+
+    if payload.username != admin.username:
+        existing = (
+            (await db.execute(select(Admin).where(Admin.username == payload.username)))
+            .scalars()
+            .first()
+        )
+        if existing is not None:
+            raise HTTPException(status_code=409, detail="Username already taken")
+        admin.username = payload.username
+
+    if payload.new_password:
+        admin.password_hash = hash_password(payload.new_password)
+        # invalide les autres sessions (garde la session courante)
+        current_token = request.cookies.get(SESSION_COOKIE)
+        await db.execute(
+            delete(SessionToken).where(
+                SessionToken.admin_id == admin.id,
+                SessionToken.token != current_token,
+            )
+        )
+
+    await db.commit()
+    return {"username": admin.username}
+
+
+# ===== Admin : stats (dashboard) =====
 
 
 @router.get("/admin/stats")
 async def admin_stats(
     db: AsyncSession = Depends(get_db), _admin: Admin = Depends(get_current_admin)
 ):
-    monitors = len((await db.scalars(select(Monitor))).all())
-    checks = (await db.scalar(select(func.count(CheckResult.id)))) or 0
-    open_incidents = len(
-        (await db.scalars(select(Incident).where(Incident.status != "resolved"))).all()
+    now = utcnow()
+    cutoff_24h = now - timedelta(hours=24)
+    cutoff_30d = now - timedelta(days=30)
+
+    monitors = (
+        await db.scalars(select(Monitor).order_by(Monitor.position, Monitor.id))
+    ).all()
+
+    checks_stored = (await db.scalar(select(func.count(CheckResult.id)))) or 0
+    checks_24h = (
+        await db.scalar(
+            select(func.count(CheckResult.id)).where(CheckResult.checked_at >= cutoff_24h)
+        )
+    ) or 0
+    avg_24h = await db.scalar(
+        select(func.avg(CheckResult.response_time_ms)).where(
+            CheckResult.checked_at >= cutoff_24h
+        )
     )
-    return {"monitors": monitors, "checks_stored": checks, "open_incidents": open_incidents}
+    open_incidents = (
+        await db.scalar(
+            select(func.count(Incident.id)).where(Incident.status != "resolved")
+        )
+    ) or 0
+    incidents_30d = (
+        await db.scalar(
+            select(func.count(Incident.id)).where(Incident.created_at >= cutoff_30d)
+        )
+    ) or 0
+
+    # Série uptime globale (30 jours)
+    uptime_rows = (
+        await db.execute(
+            select(
+                func.date(CheckResult.checked_at).label("day"),
+                func.avg(case((CheckResult.ok.is_(True), 1.0), else_=0.0)).label("ok_ratio"),
+                func.avg(CheckResult.response_time_ms).label("avg_ms"),
+            )
+            .where(CheckResult.checked_at >= cutoff_30d)
+            .group_by("day")
+            .order_by("day")
+        )
+    ).all()
+
+    # Série temps de réponse globale (24 h, par heure)
+    response_rows = (
+        await db.execute(
+            select(
+                func.strftime("%Y-%m-%d %H:00", CheckResult.checked_at).label("bucket"),
+                func.avg(CheckResult.response_time_ms).label("avg_ms"),
+                func.avg(case((CheckResult.ok.is_(True), 1.0), else_=0.0)).label("ok_ratio"),
+                func.count(CheckResult.id).label("n"),
+            )
+            .where(CheckResult.checked_at >= cutoff_24h)
+            .group_by("bucket")
+            .order_by("bucket")
+        )
+    ).all()
+
+    # Dernier check + uptime par monitor
+    last_checks = {
+        c.monitor_id: c
+        for c in (
+            await db.scalars(
+                select(CheckResult).where(
+                    CheckResult.id.in_(
+                        select(func.max(CheckResult.id)).group_by(CheckResult.monitor_id)
+                    )
+                )
+            )
+        ).all()
+    }
+    uptime_by_monitor = {
+        row.monitor_id: float(row.ok_ratio or 0)
+        for row in (
+            await db.execute(
+                select(
+                    CheckResult.monitor_id,
+                    func.avg(case((CheckResult.ok.is_(True), 1.0), else_=0.0)).label(
+                        "ok_ratio"
+                    ),
+                )
+                .where(CheckResult.checked_at >= cutoff_30d)
+                .group_by(CheckResult.monitor_id)
+            )
+        ).all()
+    }
+
+    monitor_statuses = []
+    up = down = unknown = 0
+    for m in monitors:
+        last = last_checks.get(m.id)
+        status = "up" if (last and last.ok) else ("down" if last else "unknown")
+        if status == "up":
+            up += 1
+        elif status == "down":
+            down += 1
+        else:
+            unknown += 1
+        monitor_statuses.append(
+            {
+                "id": m.id,
+                "name": m.name,
+                "group_name": m.group_name,
+                "active": m.active,
+                "status": status,
+                "response_time_ms": last.response_time_ms if last else None,
+                "last_check_at": (last.checked_at.isoformat() if last else None),
+                "uptime_ratio": uptime_by_monitor.get(m.id),
+            }
+        )
+
+    return {
+        "monitors": len(monitors),
+        "monitors_up": up,
+        "monitors_down": down,
+        "monitors_unknown": unknown,
+        "checks_stored": checks_stored,
+        "checks_24h": checks_24h,
+        "avg_response_ms_24h": round(avg_24h, 1) if avg_24h is not None else None,
+        "open_incidents": open_incidents,
+        "incidents_30d": incidents_30d,
+        "uptime_series": [
+            {
+                "date": row.day,
+                "ok_ratio": round(float(row.ok_ratio or 0), 4),
+                "avg_ms": round(row.avg_ms, 1) if row.avg_ms is not None else None,
+            }
+            for row in uptime_rows
+        ],
+        "response_series": [
+            {
+                "t": row.bucket,
+                "avg_ms": round(row.avg_ms, 1) if row.avg_ms is not None else None,
+                "ok_ratio": round(float(row.ok_ratio or 0), 4),
+                "checks": int(row.n),
+            }
+            for row in response_rows
+        ],
+        "monitor_statuses": monitor_statuses,
+    }

@@ -8,15 +8,25 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from .models import Setting
 
 DEFAULT_SETTINGS: dict[str, str] = {
+    # Identité
     "site_name": "Status Page",
-    "site_icon": "",  # emoji ou URL d'icône
-    "accent_color": "#ffb454",
+    "site_icon": "",  # emoji ou URL
+    "site_url": "",  # lien optionnel sur la marque
+    "favicon_url": "",
     "welcome_text": "Suivi en temps réel de l'état de nos services.",
-    "footer_text": "Propulsé par Status Page",
+    "footer_text": "Made with ♥ by WewennJr",
+    # Apparence
+    "accent_color": "",  # vide = couleurs du thème
+    "ok_color": "",
+    "down_color": "",
     "default_language": "fr",
     "default_theme": "system",  # light | dark | system
+    # Comportement
     "retention_days": "90",
     "history_days": "90",
+    "default_show_uptime": "true",
+    "default_show_response_time": "true",
+    "show_incidents_history": "true",
 }
 
 

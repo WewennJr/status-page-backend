@@ -16,7 +16,6 @@ load_dotenv(ENV_FILE)
 @dataclass(frozen=True)
 class Settings:
     environment: str  # "development" | "production"
-    setup_token: str  # si défini, requis par /api/setup (anti-bot)
 
     @property
     def is_dev(self) -> bool:
@@ -24,7 +23,4 @@ class Settings:
 
 
 def get_settings() -> Settings:
-    return Settings(
-        environment=os.environ.get("STATUS_ENVIRONMENT", "development"),
-        setup_token=os.environ.get("STATUS_SETUP_TOKEN", ""),
-    )
+    return Settings(environment=os.environ.get("STATUS_ENVIRONMENT", "development"))

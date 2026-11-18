@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -69,7 +70,6 @@ class HistoryPoint(BaseModel):
 class SetupRequest(BaseModel):
     username: str = Field(min_length=3, max_length=64)
     password: str = Field(min_length=8)
-    token: str = ""
 
 
 class LoginRequest(BaseModel):
@@ -138,13 +138,29 @@ class IncidentOut(BaseModel):
 # ===== Admin : settings =====
 
 
+HEX_COLOR = r"^$|^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$"
+
+
 class SettingsIn(BaseModel):
-    site_name: str
-    site_icon: str
-    accent_color: str
-    welcome_text: str
-    footer_text: str
-    default_language: str
-    default_theme: str
-    retention_days: int
-    history_days: int
+    site_name: str = Field(min_length=1, max_length=128)
+    site_icon: str = Field(default="", max_length=255)
+    site_url: str = Field(default="", max_length=255)
+    favicon_url: str = Field(default="", max_length=255)
+    welcome_text: str = Field(default="", max_length=500)
+    footer_text: str = Field(default="", max_length=255)
+    accent_color: str = Field(default="", pattern=HEX_COLOR)
+    ok_color: str = Field(default="", pattern=HEX_COLOR)
+    down_color: str = Field(default="", pattern=HEX_COLOR)
+    default_language: Literal["fr", "en"] = "fr"
+    default_theme: Literal["system", "light", "dark"] = "system"
+    retention_days: int = Field(default=90, ge=7, le=3650)
+    history_days: int = Field(default=90, ge=7, le=365)
+    default_show_uptime: bool = True
+    default_show_response_time: bool = True
+    show_incidents_history: bool = True
+
+
+class AccountUpdate(BaseModel):
+    username: str = Field(min_length=3, max_length=64)
+    current_password: str = Field(min_length=1, max_length=128)
+    new_password: str | None = Field(default=None, min_length=8, max_length=128)

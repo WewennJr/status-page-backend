@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import defaultdict
 from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -126,7 +127,7 @@ async def overview(db: AsyncSession = Depends(get_db)):
             .order_by(Incident.created_at.desc())
         )
     ).all()
-    active_public = [await _incident_public(db, i) for i in active]
+    active_public = await _incidents_public(db, list(active))
 
     return PublicOverview(
         setup_done=admin_count > 0,
@@ -136,35 +137,51 @@ async def overview(db: AsyncSession = Depends(get_db)):
     )
 
 
-async def _incident_public(db: AsyncSession, incident: Incident) -> IncidentPublic:
-    monitor_name = None
-    if incident.monitor_id:
-        monitor = await db.get(Monitor, incident.monitor_id)
-        monitor_name = monitor.name if monitor else None
-    updates = (
+async def _incidents_public(db: AsyncSession, incidents: list[Incident]) -> list[IncidentPublic]:
+    """Sérialise une liste d'incidents en 2 requêtes (noms + updates), sans N+1."""
+    if not incidents:
+        return []
+
+    ids = [i.id for i in incidents]
+    monitor_ids = [i.monitor_id for i in incidents if i.monitor_id]
+    names: dict[int, str] = {}
+    if monitor_ids:
+        rows = await db.execute(
+            select(Monitor.id, Monitor.name).where(Monitor.id.in_(monitor_ids))
+        )
+        names = {row.id: row.name for row in rows.all()}
+
+    updates_rows = (
         await db.scalars(
             select(IncidentUpdate)
-            .where(IncidentUpdate.incident_id == incident.id)
+            .where(IncidentUpdate.incident_id.in_(ids))
             .order_by(IncidentUpdate.created_at)
         )
     ).all()
-    return IncidentPublic(
-        id=incident.id,
-        monitor_id=incident.monitor_id,
-        monitor_name=monitor_name,
-        title=incident.title,
-        description=incident.description or "",
-        status=incident.status,
-        created_at=incident.created_at,
-        updated_at=incident.updated_at,
-        resolved_at=incident.resolved_at,
-        updates=[
-            IncidentUpdatePublic(
-                message=u.message, status=u.status, created_at=u.created_at
-            )
-            for u in updates
-        ],
-    )
+    updates_by: dict[int, list[IncidentUpdate]] = defaultdict(list)
+    for u in updates_rows:
+        updates_by[u.incident_id].append(u)
+
+    return [
+        IncidentPublic(
+            id=incident.id,
+            monitor_id=incident.monitor_id,
+            monitor_name=names.get(incident.monitor_id) if incident.monitor_id else None,
+            title=incident.title,
+            description=incident.description or "",
+            status=incident.status,
+            created_at=incident.created_at,
+            updated_at=incident.updated_at,
+            resolved_at=incident.resolved_at,
+            updates=[
+                IncidentUpdatePublic(
+                    message=u.message, status=u.status, created_at=u.created_at
+                )
+                for u in updates_by.get(incident.id, [])
+            ],
+        )
+        for incident in incidents
+    ]
 
 
 @router.get("/incidents", response_model=list[IncidentPublic])
@@ -180,7 +197,7 @@ async def incidents_history(
             .limit(limit)
         )
     ).all()
-    return [await _incident_public(db, i) for i in resolved]
+    return await _incidents_public(db, list(resolved))
 
 
 @router.get("/monitor/{monitor_id}/history", response_model=list[HistoryPoint])
@@ -195,26 +212,26 @@ async def monitor_history(
 
     cutoff = _days_ago(days)
     if days <= 1:
-        bucket = "substr(checked_at, 1, 16)"  # par minute
+        bucket = func.substr(CheckResult.checked_at, 1, 16)  # par minute
     elif days <= 7:
-        bucket = "strftime('%Y-%m-%d %H:00', checked_at)"  # par heure
+        bucket = func.strftime("%Y-%m-%d %H:00", CheckResult.checked_at)  # par heure
     else:
-        bucket = "date(checked_at)"  # par jour
+        bucket = func.date(CheckResult.checked_at)  # par jour
 
     agg = await db.execute(
         select(
-            func.strftime(bucket, CheckResult.checked_at).label("t"),
+            bucket.label("bucket"),
             func.avg(CheckResult.response_time_ms).label("avg_ms"),
             func.avg(case((CheckResult.ok.is_(True), 1.0), else_=0.0)).label("ok_ratio"),
             func.count(CheckResult.id).label("n"),
         )
         .where(CheckResult.monitor_id == monitor_id, CheckResult.checked_at >= cutoff)
-        .group_by("t")
-        .order_by("t")
+        .group_by("bucket")
+        .order_by("bucket")
     )
     return [
         HistoryPoint(
-            t=row.t,
+            t=row.bucket,
             avg_ms=round(row.avg_ms, 1) if row.avg_ms is not None else None,
             ok_ratio=round(float(row.ok_ratio or 0), 4),
             checks=int(row.n),
