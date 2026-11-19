@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from urllib.parse import urlsplit
 
@@ -27,7 +27,7 @@ def create_app() -> FastAPI:
     settings = get_settings()
 
     @asynccontextmanager
-    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         await init_db()
         task = asyncio.create_task(scheduler_loop())
         logging.getLogger("status").info(
