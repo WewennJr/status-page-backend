@@ -148,22 +148,3 @@ Run it under systemd (dedicated user, `Restart=on-failure`,
 frontend build and proxies `/api/` to `127.0.0.1:8002`. See the
 `status-frontend/deploy/nginx-status-page.conf` template for headers, CSP and
 proxy settings.
-
-## Project layout
-
-```
-src/status_backend/
-  __init__.py        # entry point (uvicorn, port 8002)
-  app.py             # create_app() factory, middleware, lifespan
-  checker.py         # check scheduler + automatic incidents + cleanup
-  auth.py            # password hashing, session helpers
-  ratelimit.py       # in-memory per-IP limiter
-  database.py        # async engine/session, schema creation, indexes
-  models.py          # SQLAlchemy models
-  schemas.py         # Pydantic request/response models
-  settings.py        # site settings defaults
-  core/config.py     # .env loading
-  routers/
-    public.py        # read-only public API
-    admin.py         # setup/auth + admin API
-```

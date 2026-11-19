@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+from .core.config import get_settings
 from .models import Base
 
-DATA_DIR = Path(os.environ.get("STATUS_DATA_DIR", "./data"))
+DATA_DIR = Path(get_settings().data_dir)
 DATABASE_PATH = DATA_DIR / "status.db"
 
 engine = create_async_engine(

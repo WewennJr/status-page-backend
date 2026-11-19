@@ -15,6 +15,7 @@ load_dotenv(ENV_FILE)
 @dataclass(frozen=True)
 class Settings:
     environment: str  # "development" | "production"
+    data_dir: str
 
     @property
     def is_dev(self) -> bool:
@@ -22,4 +23,7 @@ class Settings:
 
 
 def get_settings() -> Settings:
-    return Settings(environment=os.environ.get("STATUS_ENVIRONMENT", "development"))
+    return Settings(
+        environment=os.environ.get("STATUS_ENVIRONMENT", "development"),
+        data_dir=os.environ.get("STATUS_DATA_DIR", "./data"),
+    )
