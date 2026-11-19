@@ -3,9 +3,20 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field
+
+
+def _max_bcrypt_bytes(value: str) -> str:
+    if len(value.encode()) > 72:
+        raise ValueError("password must be at most 72 bytes")
+    return value
+
+
+Password = Annotated[
+    str, Field(min_length=8, max_length=128), AfterValidator(_max_bcrypt_bytes)
+]
 
 
 # ===== Public =====
@@ -69,7 +80,7 @@ class HistoryPoint(BaseModel):
 
 class SetupRequest(BaseModel):
     username: str = Field(min_length=3, max_length=64)
-    password: str = Field(min_length=8)
+    password: Password
 
 
 class LoginRequest(BaseModel):
@@ -176,4 +187,4 @@ class SettingsIn(BaseModel):
 class AccountUpdate(BaseModel):
     username: str = Field(min_length=3, max_length=64)
     current_password: str = Field(min_length=1, max_length=128)
-    new_password: str | None = Field(default=None, min_length=8, max_length=128)
+    new_password: Password | None = None
