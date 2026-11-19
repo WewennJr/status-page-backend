@@ -148,3 +148,7 @@ Run it under systemd (dedicated user, `Restart=on-failure`,
 frontend build and proxies `/api/` to `127.0.0.1:8002`. See the
 `status-frontend/deploy/nginx-status-page.conf` template for headers, CSP and
 proxy settings.
+
+---
+
+Made with ♥ by WewennJr
