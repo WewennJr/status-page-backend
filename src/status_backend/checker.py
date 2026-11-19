@@ -1,4 +1,4 @@
-"""Scheduler de checks HTTP + incidents automatiques."""
+"""HTTP check scheduler + automatic incidents."""
 
 from __future__ import annotations
 
@@ -25,12 +25,12 @@ from .models import (
 
 logger = logging.getLogger("status.checker")
 
-SCAN_INTERVAL = 10  # seconde entre deux passes de scan
+SCAN_INTERVAL = 10  # seconds between two scan passes
 CHECK_TIMEOUT = 10.0
 USER_AGENT = "StatusPage/1.0 (+https://github.com)"
 DEFAULT_RETENTION_DAYS = 90
 
-# état en mémoire : monitor_id -> next_check_ts
+# in-memory state: monitor_id -> next_check_ts
 _next_due: dict[int, float] = {}
 
 
@@ -78,8 +78,8 @@ async def _ensure_auto_incident(
     if not ok and open_incident is None:
         incident = Incident(
             monitor_id=monitor.id,
-            title=f"{monitor.name} est injoignable",
-            description=f"Le check automatique a échoué : {error or 'erreur inconnue'}",
+            title=f"{monitor.name} is unreachable",
+            description=f"Automatic check failed: {error or 'unknown error'}",
             status="investigating",
             auto=True,
         )
@@ -88,7 +88,7 @@ async def _ensure_auto_incident(
         db.add(
             IncidentUpdate(
                 incident_id=incident.id,
-                message=f"Le check a échoué : {error or 'erreur inconnue'}. Investigation en cours.",
+                message=f"Check failed: {error or 'unknown error'}. Investigating.",
                 status="investigating",
             )
         )
@@ -98,7 +98,7 @@ async def _ensure_auto_incident(
         db.add(
             IncidentUpdate(
                 incident_id=open_incident.id,
-                message="Le service est de nouveau opérationnel.",
+                message="The service is back up.",
                 status="resolved",
             )
         )
@@ -152,13 +152,13 @@ async def _cleanup_old_checks() -> None:
             retention = DEFAULT_RETENTION_DAYS
         cutoff = utcnow() - timedelta(days=retention)
         await db.execute(delete(CheckResult).where(CheckResult.checked_at < cutoff))
-        # purge des sessions expirées
+        # purge expired sessions
         await db.execute(delete(SessionToken).where(SessionToken.expires_at < utcnow()))
         await db.commit()
 
 
 async def scheduler_loop() -> None:
-    logger.info("checker démarré (scan toutes les %ss)", SCAN_INTERVAL)
+    logger.info("checker started (scanning every %ss)", SCAN_INTERVAL)
     last_cleanup = 0.0
     while True:
         try:
@@ -167,5 +167,5 @@ async def scheduler_loop() -> None:
                 last_cleanup = time.monotonic()
                 await _cleanup_old_checks()
         except Exception:
-            logger.exception("erreur dans la boucle de checks")
+            logger.exception("error in the check loop")
         await asyncio.sleep(SCAN_INTERVAL)

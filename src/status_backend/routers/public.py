@@ -1,4 +1,4 @@
-"""Endpoints publics (lecture seule)."""
+"""Public endpoints (read-only)."""
 
 from __future__ import annotations
 
@@ -35,7 +35,7 @@ async def _monitors_with_status(db: AsyncSession, history_days: int):
         )
     ).all()
 
-    # dernier check par monitor
+    # last check per monitor
     last_checks: dict[int, CheckResult] = {}
     result = await db.execute(
         select(CheckResult)
@@ -49,7 +49,7 @@ async def _monitors_with_status(db: AsyncSession, history_days: int):
     for check in result.scalars().all():
         last_checks[check.monitor_id] = check
 
-    # agrégats par jour sur la fenêtre history_days
+    # daily aggregates over the history_days window
     cutoff = _days_ago(history_days)
     agg = await db.execute(
         select(
@@ -138,7 +138,7 @@ async def overview(db: AsyncSession = Depends(get_db)):
 
 
 async def _incidents_public(db: AsyncSession, incidents: list[Incident]) -> list[IncidentPublic]:
-    """Sérialise une liste d'incidents en 2 requêtes (noms + updates), sans N+1."""
+    """Serialize a list of incidents in 2 queries (names + updates), without N+1."""
     if not incidents:
         return []
 

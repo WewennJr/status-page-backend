@@ -1,4 +1,4 @@
-"""Paramètres du site (clé/valeur) avec valeurs par défaut."""
+"""Site settings (key/value) with default values."""
 
 from __future__ import annotations
 
@@ -8,20 +8,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from .models import Setting
 
 DEFAULT_SETTINGS: dict[str, str] = {
-    # Identité
+    # Identity
     "site_name": "Status Page",
-    "site_icon": "",  # emoji ou URL
-    "site_url": "",  # lien optionnel sur la marque
+    "site_icon": "",  # emoji or URL
+    "site_url": "",  # optional link on the brand
     "favicon_url": "",
-    "welcome_text": "Suivi en temps réel de l'état de nos services.",
+    "welcome_text": "Real-time status of our services.",
     "footer_text": "Made with ♥ by WewennJr",
-    # Apparence
-    "accent_color": "",  # vide = couleurs du thème
+    # Appearance
+    "accent_color": "",  # empty = theme colors
     "ok_color": "",
     "down_color": "",
     "default_language": "fr",
     "default_theme": "system",  # light | dark | system
-    # Comportement
+    # Behavior
     "retention_days": "90",
     "history_days": "90",
     "default_show_uptime": "true",

@@ -1,4 +1,4 @@
-"""Authentification : setup first-run, sessions par cookie."""
+"""Authentication: first-run setup and cookie-based sessions."""
 
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ def verify_password(password: str, hashed: str) -> bool:
         return False
 
 
-# Vérifié quand l'utilisateur n'existe pas, pour éviter une fuite de timing.
+# Checked when the user does not exist, to avoid a timing leak.
 DUMMY_PASSWORD_HASH = hash_password(secrets.token_hex(16))
 
 

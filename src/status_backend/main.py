@@ -1,4 +1,4 @@
-"""Instance d'app pour `uvicorn status_backend.main:app` (compat)."""
+"""App instance for `uvicorn status_backend.main:app` (compat)."""
 
 from .app import create_app
 

@@ -1,4 +1,4 @@
-"""Base de données SQLite async."""
+"""Async SQLite database."""
 
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ async def init_db() -> None:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-        # Index composite pour les agrégations d'historique (bases existantes incluses)
+        # Composite index for history aggregations (covers existing databases too)
         await conn.execute(
             text(
                 "CREATE INDEX IF NOT EXISTS ix_checks_monitor_checked "

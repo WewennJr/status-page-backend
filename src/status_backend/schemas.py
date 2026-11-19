@@ -1,4 +1,4 @@
-"""Schemas Pydantic."""
+"""Pydantic schemas."""
 
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ class MonitorPublic(BaseModel):
     status: str  # up | down | unknown
     last_check_at: datetime | None
     response_time_ms: float | None
-    uptime_ratio: float | None  # sur la fenêtre history_days
+    uptime_ratio: float | None  # over the history_days window
     bars: list[UptimeBar]
     show_response_time: bool
     show_uptime: bool
@@ -86,7 +86,7 @@ class AuthState(BaseModel):
     username: str | None = None
 
 
-# ===== Admin : monitors =====
+# ===== Admin: monitors =====
 
 
 URL_PATTERN = r"^https?://[^\s]+$"
@@ -120,7 +120,7 @@ class MonitorReorder(BaseModel):
     items: list[MonitorOrderItem] = Field(min_length=1, max_length=500)
 
 
-# ===== Admin : incidents =====
+# ===== Admin: incidents =====
 
 
 class IncidentIn(BaseModel):
@@ -148,7 +148,7 @@ class IncidentOut(BaseModel):
     resolved_at: datetime | None
 
 
-# ===== Admin : settings =====
+# ===== Admin: settings =====
 
 
 HEX_COLOR = r"^$|^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$"

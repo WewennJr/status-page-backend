@@ -1,4 +1,4 @@
-"""Configuration de l'application, chargée depuis status-backend/.env."""
+"""Application configuration, loaded from status-backend/.env."""
 
 from __future__ import annotations
 

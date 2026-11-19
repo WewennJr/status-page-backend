@@ -1,4 +1,4 @@
-"""Rate limiting simple en mémoire (par IP) pour les endpoints sensibles."""
+"""Simple in-memory rate limiting (per IP) for sensitive endpoints."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ class RateLimiter:
         self._hits: dict[str, deque[float]] = defaultdict(deque)
 
     def check(self, key: str) -> None:
-        """Lève une 429 si trop de tentatives récentes, sinon enregistre celle-ci."""
+        """Raise 429 if there are too many recent attempts, otherwise record this one."""
         now = time.monotonic()
         if len(self._hits) > 5000:
             for stale in [k for k, v in self._hits.items() if not v]:
@@ -32,7 +32,7 @@ class RateLimiter:
 
 
 def client_key(request: Request) -> str:
-    # Derrière nginx, uvicorn (proxy_headers) renseigne la vraie IP.
+    # Behind nginx, uvicorn (proxy_headers) provides the real client IP.
     return request.client.host if request.client else "unknown"
 
 

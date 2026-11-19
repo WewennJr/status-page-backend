@@ -1,4 +1,4 @@
-"""Endpoints admin (setup first-run + CRUD protégé)."""
+"""Admin endpoints (first-run setup + protected CRUD)."""
 
 from __future__ import annotations
 
@@ -50,7 +50,7 @@ async def setup_required(db: AsyncSession = Depends(get_db)):
 
 
 def _is_https(request: Request) -> bool:
-    # nginx proxifie avec X-Forwarded-Proto ; uvicorn fait confiance via proxy_headers
+    # nginx proxies with X-Forwarded-Proto; uvicorn trusts it via proxy_headers
     return request.headers.get("x-forwarded-proto") == "https"
 
 
@@ -74,8 +74,8 @@ async def setup(
     db: AsyncSession = Depends(get_db),
 ):
     setup_limiter.check(client_key(request))
-    # INSERT conditionnel atomique : empêche deux setups concurrents de créer
-    # deux comptes administrateurs.
+    # Atomic conditional INSERT: prevents two concurrent setups from creating
+    # two administrator accounts.
     result = await db.execute(
         text(
             "INSERT INTO admins (username, password_hash, created_at) "
@@ -378,7 +378,7 @@ async def update_account(
 
     if payload.new_password:
         admin.password_hash = hash_password(payload.new_password)
-        # invalide les autres sessions (garde la session courante)
+        # invalidate other sessions (keep the current one)
         current_token = request.cookies.get(SESSION_COOKIE)
         await db.execute(
             delete(SessionToken).where(
@@ -432,7 +432,7 @@ async def admin_stats(
         )
     ) or 0
 
-    # Série uptime globale (30 jours)
+    # Global uptime series (30 days)
     uptime_rows = (
         await db.execute(
             select(
@@ -446,7 +446,7 @@ async def admin_stats(
         )
     ).all()
 
-    # Série temps de réponse globale (24 h, par heure)
+    # Global response time series (24 h, per hour)
     response_rows = (
         await db.execute(
             select(
@@ -461,7 +461,7 @@ async def admin_stats(
         )
     ).all()
 
-    # Dernier check + uptime par monitor
+    # Last check + uptime per monitor
     last_checks = {
         c.monitor_id: c
         for c in (

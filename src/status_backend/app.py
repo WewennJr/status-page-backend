@@ -1,4 +1,4 @@
-"""Factory de l'application FastAPI."""
+"""FastAPI application factory."""
 
 from __future__ import annotations
 
@@ -31,7 +31,7 @@ def create_app() -> FastAPI:
         await init_db()
         task = asyncio.create_task(scheduler_loop())
         logging.getLogger("status").info(
-            "Status Page démarré (env=%s)", settings.environment
+            "Status Page started (env=%s)", settings.environment
         )
         yield
         task.cancel()
@@ -48,8 +48,8 @@ def create_app() -> FastAPI:
         redoc_url=None,
     )
 
-    # CORS utile uniquement en développement (Vite sur un autre port).
-    # En production, frontend et API sont servis par le même domaine (nginx).
+    # CORS is only useful in development (Vite runs on another port).
+    # In production, frontend and API are served from the same domain (nginx).
     if settings.is_dev:
         app.add_middleware(
             CORSMiddleware,
@@ -64,8 +64,8 @@ def create_app() -> FastAPI:
 
     @app.middleware("http")
     async def security_headers(request: Request, call_next):
-        # Défense CSRF complémentaire : SameSite=Lax + contrôle de l'Origin
-        # sur les méthodes qui modifient l'état.
+        # Extra CSRF defense: SameSite=Lax + Origin check
+        # on state-changing methods.
         if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
             origin = request.headers.get("origin")
             if origin:
@@ -74,7 +74,7 @@ def create_app() -> FastAPI:
                     request.headers.get("host", ""),
                     request.headers.get("x-forwarded-host", ""),
                 } - {""}
-                # En dev, Vite réécrit le Host (changeOrigin) : on accepte localhost.
+                # In dev, Vite rewrites the Host (changeOrigin): accept localhost.
                 dev_local = settings.is_dev and parts.hostname in {"localhost", "127.0.0.1", "::1"}
                 if parts.netloc not in allowed_hosts and not dev_local:
                     return JSONResponse(status_code=403, content={"detail": "Invalid origin"})

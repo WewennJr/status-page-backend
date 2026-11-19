@@ -1,7 +1,7 @@
 [project]
 name = "status-backend"
 version = "0.1.0"
-description = "Add your description here"
+description = "Self-hosted status page backend: HTTP monitoring API (FastAPI + SQLite)"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [

@@ -12,17 +12,17 @@ venv/
 dist/
 build/
 
-# Base de données
+# Database
 data/
 *.db
 *.db-journal
 *.db-wal
 *.db-shm
 
-# Scripts locaux
+# Local scripts
 *.sh
 
-# Environnement
+# Environment
 .env
 .env.*
 !.env.example

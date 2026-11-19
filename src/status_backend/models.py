@@ -1,4 +1,4 @@
-"""Modèles SQLAlchemy pour Status Page."""
+"""SQLAlchemy models for Status Page."""
 
 from __future__ import annotations
 
